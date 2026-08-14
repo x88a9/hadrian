@@ -1,0 +1,21 @@
+# Optional local overrides. Copy to docker-compose.override.yml (gitignored)
+# and adjust; Compose picks it up automatically.
+#
+# Two things are usually worth overriding:
+#
+#   1. Importing your own research workbook instead of the synthetic sample.
+#   2. Mounting the result directories of the upstream research engines, which
+#      feed POST /import/programmatic.
+#
+# Both are mounted read-only — this platform never writes back to its sources.
+
+services:
+  backend:
+    environment:
+      XLSX_PATH: /data/workbook.xlsx
+      HADRIAN2_RESULTS_DIR: /data/hadrian2/results
+      HADRIAN_ENGINE_RESULTS_DIR: /data/hadrian_engine/results
+    volumes:
+      - /path/to/your/workbook.xlsx:/data/workbook.xlsx:ro
+      - /path/to/hadrian2/results:/data/hadrian2/results:ro
+      - /path/to/hadrian_engine/results:/data/hadrian_engine/results:ro

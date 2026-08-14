@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest
+httpx
+# pgserver: kein cp314-Wheel verfuegbar (Python 3.14). Dev-Postgres laeuft
+# stattdessen ueber scripts/dev_db.sh mit portablen zonky.io-Binaries.

@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]
+markers = [
+    "integration: Tests, die eine laufende Postgres-Test-DB brauchen (Auto-Skip ohne Server).",
+]

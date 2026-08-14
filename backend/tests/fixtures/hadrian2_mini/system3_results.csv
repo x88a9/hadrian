@@ -1,0 +1,9 @@
+variant_id,timeframe,entry_trigger,entry_level,tp_norm,sl_buffer,volume_filter,n_trades,low_confidence,insufficient_sample,net_ev,oos_net_ev,win_rate,is_net_ev,profit_factor
+t1,15m,wick_any,-0.05,0.5,0.2,False,540,False,False,0.15,0.18,0.86,0.66,1.10
+t2,15m,wick_any,-0.05,0.5,0.1,False,540,False,False,0.16,0.20,0.86,0.67,1.20
+t3,15m,wick_any,-0.05,0.25,0.2,False,540,False,False,0.14,0.27,0.85,0.65,1.15
+t4,15m,wick_any,-0.05,0.25,0.1,False,540,False,False,0.17,0.30,0.87,0.68,1.25
+h1,1h,wick_any,-0.05,0.5,0.1,False,216,False,False,0.19,0.30,0.48,0.05,1.30
+h2,1h,wick_any,-0.05,0.25,0.1,False,216,False,False,0.20,0.31,0.49,0.06,1.35
+f1,4h,wick_any,-0.05,0.5,0.1,False,120,False,False,0.10,0.15,0.40,0.02,1.10
+f2,4h,wick_any,-0.05,0.25,0.1,False,120,False,False,0.11,0.16,0.41,0.03,1.12

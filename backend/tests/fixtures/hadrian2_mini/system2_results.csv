@@ -1,0 +1,5 @@
+variant_id,zone_threshold,entry_trigger,volume_filter,sl_type,tp_type,ema_filter,n_trades,low_confidence,insufficient_sample,net_ev,oos_net_ev,win_rate,is_net_ev,profit_factor
+w1,"(0.0, 0.2)",zone_reentry,True,atr10,msb5,21.0,50,False,False,0.50,0.38,0.22,0.60,1.5
+w2,"(0.0, 0.2)",zone_reentry,True,atr10,tp2,21.0,50,False,False,0.40,0.30,0.21,0.50,1.4
+w3,"(0.0, 0.2)",zone_reentry,True,box,msb5,21.0,50,False,False,0.45,0.33,0.23,0.55,1.45
+w4,"(0.0, 0.2)",zone_reentry,True,box,tp2,21.0,50,False,False,0.42,0.31,0.24,0.52,1.42

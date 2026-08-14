@@ -1,0 +1,3 @@
+rank,variant_id,timeframe,entry_trigger,entry_level,tp_norm,sl_buffer,volume_filter,n_trades,is_net_ev,oos_net_ev,net_ev,win_rate,profit_factor,wf_n_windows,wf_pct_positive,mc_ev_p5,mc_ev_p25,mc_ev_p50,mc_ev_p75,mc_ev_p95,mc_pct_pos,verdict,verdict_reason
+1,tf=15m_trig=wick_any_el=-0.05_tp=0.750_sl=0.10_vf=0,15m,wick_any,-0.05,0.75,0.1,False,216,0.3066,-0.0588,0.0952,0.3565,1.1239,16,43.8,-0.446,-0.225,-0.0661,0.1027,0.358,39.9,ARTIFACT,severe layering
+6,tf=1h_trig=wick_any_el=-0.05_tp=0.500_sl=0.10_vf=0,1h,wick_any,-0.05,0.5,0.1,False,216,0.0481,0.3014,0.1947,0.4815,1.3185,16,43.8,0.1,0.2,0.3,0.4,0.5,60.0,ROBUST,ok

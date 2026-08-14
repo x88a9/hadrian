@@ -1,0 +1,5 @@
+variant_id,box_type,entry_trigger,max_trades,sl_type,tp_type,regime_filter,n_trades,low_confidence,insufficient_sample,net_ev,oos_net_ev,win_rate,is_net_ev,profit_factor
+v1,HL,retest,1,box,msb5,False,100,False,False,0.10,0.21,0.44,0.05,1.2
+v2,HL,retest,1,box,tp2,False,100,False,False,0.11,0.22,0.45,0.06,1.3
+v3,HL,retest,1,atr10,msb5,False,100,True,False,0.09,0.19,0.43,0.04,1.1
+v4,HL,retest,1,atr10,tp2,False,100,False,False,0.12,0.25,0.46,0.07,1.4

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hadrian3-client"
+version = "0.1.0"
+description = "Python client for the Hadrian3 REST API"
+requires-python = ">=3.10"
+dependencies = ["httpx"]
+
+[project.optional-dependencies]
+pandas = ["pandas"]
+
+[tool.setuptools.packages.find]
+include = ["hadrian3_client*"]

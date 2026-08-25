@@ -364,3 +364,80 @@ def test_only_one_concurrent_position_is_expressible():
     otherwise is refused rather than silently mis-executed."""
     with pytest.raises(ValidationError):
         RiskSpec(stop=StopSpec(kind="percent", value=1.0), max_concurrent_positions=2)
+
+
+# --------------------------------------------------------------------------- #
+# The two rule carriers
+# --------------------------------------------------------------------------- #
+
+PYTHON_RULES = "class S(Strategy):\n    def on_bar(self, ctx):\n        return None\n"
+
+
+def python_strategy(**overrides) -> StrategyDefinition:
+    kwargs = dict(
+        name="Written in Python",
+        asset="BTC",
+        timeframe="H1",
+        direction="long",
+        rules="python",
+        python_source=PYTHON_RULES,
+        indicators=[IndicatorSpec(id="atr14", kind="atr", params={"period": 14.0})],
+        risk=RiskSpec(stop=StopSpec(kind="atr_multiple", value=2.0, indicator_id="atr14")),
+    )
+    kwargs.update(overrides)
+    return StrategyDefinition(**kwargs)
+
+
+def test_a_python_strategy_needs_no_declarative_entry_rule():
+    d = python_strategy()
+    assert d.rules == "python"
+    assert d.entry_long is None
+
+
+def test_a_python_strategy_round_trips():
+    d = python_strategy()
+    assert StrategyDefinition.from_json_dict(d.to_json_dict()) == d
+    assert StrategyDefinition.from_json_dict(d.to_json_dict()).python_source == PYTHON_RULES
+
+
+def test_a_python_strategy_shares_the_metadata_both_paths_use():
+    """The shared half is what makes a hand-written strategy sweepable and
+    storable exactly like a designed one."""
+    d = python_strategy(
+        parameters={"lookback": ParameterSpec(value=20, lo=10, hi=40, step=10)}
+    )
+    assert d.parameters["lookback"].sweep_values() == [10, 20, 30, 40]
+    assert d.risk.stop.indicator_id == "atr14"
+    assert d.costs.entry_fee_pct == 0.000144
+
+
+def test_python_rules_refuse_an_empty_source():
+    with pytest.raises(ValidationError, match="python_source is empty"):
+        python_strategy(python_source="   ")
+
+
+def test_a_definition_cannot_carry_both_kinds_of_rule():
+    """Two answers to "when does this buy" and no way to say which one ran."""
+    with pytest.raises(ValidationError, match="rules is 'python'"):
+        python_strategy(
+            entry_long=Comparison(
+                left=PriceOperand(), cmp=">", right=ConstOperand(value=0.0)
+            )
+        )
+
+
+def test_python_rules_refuse_declarative_filters():
+    with pytest.raises(ValidationError, match="filters belong in the source"):
+        python_strategy(
+            filters=[Comparison(left=PriceOperand(), cmp=">", right=ConstOperand(value=0.0))]
+        )
+
+
+def test_declarative_rules_refuse_a_stray_python_source():
+    with pytest.raises(ValidationError, match="clear one of them"):
+        sma_cross(python_source=PYTHON_RULES)
+
+
+def test_declarative_is_the_default_carrier():
+    assert sma_cross().rules == "declarative"
+    assert sma_cross().python_source is None

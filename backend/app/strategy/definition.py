@@ -24,6 +24,21 @@ parameter is declared with its range in one place.
 **Validation is eager.** Unknown indicator ids, negative offsets, a short entry
 rule on a long-only strategy — all of it is refused when the definition is
 built, not when the engine trips over it three hundred bars into a backtest.
+
+**One definition, two rule carriers.** Free-form Python cannot honestly be
+compiled into the expression tree above — that would either restrict the
+language to a DSL wearing Python's syntax, or claim a translation that does not
+exist. So ``rules`` says which carrier holds the logic: ``"declarative"`` uses
+the ``entry_*``/``exit_*`` trees and the engine evaluates them directly, while
+``"python"`` puts the logic in ``python_source``, which runs in the sandbox.
+Everything else — metadata, indicators, risk, costs, parameters, and therefore
+storage, sweeps, provenance and the whole UI — is shared. That is the majority
+of a strategy, and it is what makes a hand-written strategy openable in the
+designer and a designed one sweepable.
+
+The source lives *in* the definition rather than beside it, for the same reason
+``resolve()`` writes parameter values back: a stored result should record
+exactly what produced it.
 """
 
 from __future__ import annotations
@@ -304,6 +319,12 @@ class StrategyDefinition(_Model):
     timeframe: str = Field(min_length=1, max_length=16)
     direction: Literal["long", "short", "both"] = "long"
 
+    #: Which carrier holds the entry/exit logic. See the module docstring.
+    rules: Literal["declarative", "python"] = "declarative"
+    #: The strategy class, as source, when ``rules == "python"``. Untrusted:
+    #: it is only ever executed through ``app.strategy.sandbox``.
+    python_source: str | None = None
+
     parameters: dict[str, ParameterSpec] = Field(default_factory=dict)
     indicators: list[IndicatorSpec] = Field(default_factory=list)
 
@@ -346,14 +367,7 @@ class StrategyDefinition(_Model):
                     f"{spec.indicator_id!r}; declared: {sorted(known)}"
                 )
 
-        if self.direction == "long" and self.entry_short is not None:
-            raise ValueError("direction is 'long' but entry_short is set")
-        if self.direction == "short" and self.entry_long is not None:
-            raise ValueError("direction is 'short' but entry_long is set")
-        if self.direction in ("long", "both") and self.entry_long is None:
-            raise ValueError(f"direction is '{self.direction}' but entry_long is unset")
-        if self.direction in ("short", "both") and self.entry_short is None:
-            raise ValueError(f"direction is '{self.direction}' but entry_short is unset")
+        self._validate_rule_carrier()
 
         for ref in self._param_refs():
             if ref not in self.parameters:
@@ -363,6 +377,48 @@ class StrategyDefinition(_Model):
                 )
 
         return self
+
+    def _validate_rule_carrier(self) -> None:
+        """Each carrier owns the logic exclusively.
+
+        A definition with both a Python source and declarative entry rules has
+        two answers to "when does this buy", and nothing downstream could say
+        which one ran. Refusing that is cheaper than picking a precedence rule
+        nobody would remember.
+        """
+        declared = [
+            name
+            for name in ("entry_long", "entry_short", "exit_long", "exit_short")
+            if getattr(self, name) is not None
+        ]
+
+        if self.rules == "python":
+            if not (self.python_source or "").strip():
+                raise ValueError("rules is 'python' but python_source is empty")
+            if declared:
+                raise ValueError(
+                    f"rules is 'python', so the logic lives in the source, but "
+                    f"{declared} are also set"
+                )
+            if self.filters:
+                raise ValueError(
+                    "rules is 'python', so filters belong in the source rather "
+                    "than in the definition"
+                )
+            return
+
+        if self.python_source is not None:
+            raise ValueError(
+                "rules is 'declarative' but python_source is set; clear one of them"
+            )
+        if self.direction == "long" and self.entry_short is not None:
+            raise ValueError("direction is 'long' but entry_short is set")
+        if self.direction == "short" and self.entry_long is not None:
+            raise ValueError("direction is 'short' but entry_long is set")
+        if self.direction in ("long", "both") and self.entry_long is None:
+            raise ValueError(f"direction is '{self.direction}' but entry_long is unset")
+        if self.direction in ("short", "both") and self.entry_short is None:
+            raise ValueError(f"direction is '{self.direction}' but entry_short is unset")
 
     def _conditions(self) -> list[tuple[Any, str]]:
         out: list[tuple[Any, str]] = []

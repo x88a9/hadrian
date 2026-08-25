@@ -86,6 +86,18 @@ def rule_vocabulary() -> dict:
         ],
         "operand_kinds": ["price", "indicator", "const", "position"],
         "position_fields": _literal_of(PositionOperand, "field"),
+        # Where a position operand may be used at all. Entry rules and filters
+        # are evaluated while flat, so the schema refuses one there — the
+        # designer should not offer it rather than let the user find out on
+        # save. See definition._reject_position_operands.
+        "position_operand_slots": ["exit_long", "exit_short"],
+        "rule_slots": [
+            {"slot": "entry_long", "label": "Einstieg long", "allows_position": False},
+            {"slot": "entry_short", "label": "Einstieg short", "allows_position": False},
+            {"slot": "exit_long", "label": "Ausstieg long", "allows_position": True},
+            {"slot": "exit_short", "label": "Ausstieg short", "allows_position": True},
+            {"slot": "filters", "label": "Filter", "allows_position": False},
+        ],
         "bool_nodes": [
             {"node": "all", "label": "All of", "arity": "many"},
             {"node": "any", "label": "Any of", "arity": "many"},

@@ -358,6 +358,13 @@ class StrategyDefinition(_Model):
 
         for cond, label in self._conditions():
             _check_condition_refs(cond, known, label)
+            # An entry rule and a filter are only ever evaluated while flat, so
+            # a position operand in one is permanently None — the comparison is
+            # false on every bar and the rule silently never fires. Validating
+            # and never firing is the worst of both: it looks like a working
+            # strategy that simply finds no setups.
+            if label.startswith("entry") or label.startswith("filters"):
+                _reject_position_operands(cond, label)
 
         for field_name in ("stop", "target"):
             spec = getattr(self.risk, field_name)
@@ -520,6 +527,29 @@ class StrategyDefinition(_Model):
             return cls.model_validate(data)
         except ValueError as exc:
             raise StrategyDefinitionError(str(exc)) from exc
+
+
+def _reject_position_operands(cond: Any, label: str) -> None:
+    """Refuse position state where there can never be a position.
+
+    Entry rules run while flat, and filters gate entries, so both see
+    ``position is None`` on every bar. ``bars_held`` in an entry rule is not a
+    subtle mistake — it is a rule that can never be true — and the engine has
+    no way to tell that apart from a setup that genuinely never occurred.
+    """
+    if isinstance(cond, BoolNode):
+        for term in cond.terms:
+            _reject_position_operands(term, label)
+        return
+    if isinstance(cond, Comparison):
+        for side, operand in (("left", cond.left), ("right", cond.right)):
+            if isinstance(operand, PositionOperand):
+                raise ValueError(
+                    f"{label}.{side}: position state ({operand.field!r}) is only "
+                    "available to exit rules. An entry rule and a filter are "
+                    "evaluated while flat, so this comparison could never be "
+                    "true."
+                )
 
 
 def _check_condition_refs(cond: Any, known: set[str], label: str) -> None:

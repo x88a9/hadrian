@@ -156,3 +156,47 @@ def test_the_whole_vocabulary_is_json_serialisable():
     import json
 
     json.dumps(VOCABULARY)
+
+
+def test_the_vocabulary_says_where_position_state_may_be_used():
+    """The schema refuses a position operand in an entry rule or a filter, so
+    the designer needs to know not to offer it there."""
+    allowed = {
+        slot["slot"] for slot in VOCABULARY["rule_slots"] if slot["allows_position"]
+    }
+    assert allowed == {"exit_long", "exit_short"}
+    assert set(VOCABULARY["position_operand_slots"]) == allowed
+
+
+def test_every_rule_slot_the_schema_has_is_described():
+    """A slot missing from the vocabulary is a rule the designer cannot edit."""
+    from app.strategy.definition import StrategyDefinition
+
+    described = {slot["slot"] for slot in VOCABULARY["rule_slots"]}
+    actual = {
+        name
+        for name in ("entry_long", "entry_short", "exit_long", "exit_short", "filters")
+        if name in StrategyDefinition.model_fields
+    }
+    assert described == actual
+
+
+def test_the_declared_position_slots_match_what_the_schema_enforces():
+    """Guard the guard: check each flag against the validator rather than
+    against the same assumption twice."""
+    import pytest
+    from pydantic import ValidationError
+
+    from tests.test_strategy_definition import position_rule, sma_cross
+
+    for slot in VOCABULARY["rule_slots"]:
+        payload = (
+            {slot["slot"]: [position_rule()]}
+            if slot["slot"] == "filters"
+            else {slot["slot"]: position_rule()}
+        )
+        if slot["allows_position"]:
+            sma_cross(**payload)
+        else:
+            with pytest.raises(ValidationError, match="only available to exit rules"):
+                sma_cross(**payload)

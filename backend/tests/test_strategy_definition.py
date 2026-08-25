@@ -441,3 +441,53 @@ def test_declarative_rules_refuse_a_stray_python_source():
 def test_declarative_is_the_default_carrier():
     assert sma_cross().rules == "declarative"
     assert sma_cross().python_source is None
+
+
+# --------------------------------------------------------------------------- #
+# Position state belongs to exit rules
+# --------------------------------------------------------------------------- #
+
+
+def position_rule() -> Comparison:
+    return Comparison(
+        left=PositionOperand(field="bars_held"),
+        cmp=">",
+        right=ConstOperand(value=5.0),
+    )
+
+
+def test_an_entry_rule_cannot_read_position_state():
+    """It would validate and then never fire: entry rules run while flat, so
+    the comparison is false on every bar. That is indistinguishable from a
+    setup that genuinely never occurred, which is the worst way to be wrong."""
+    with pytest.raises(ValidationError, match="only available to exit rules"):
+        sma_cross(entry_long=position_rule())
+
+
+def test_a_filter_cannot_read_position_state():
+    """Filters gate entries, so they see the same permanent absence."""
+    with pytest.raises(ValidationError, match="only available to exit rules"):
+        sma_cross(filters=[position_rule()])
+
+
+def test_position_state_nested_inside_an_entry_rule_is_also_caught():
+    with pytest.raises(ValidationError, match="only available to exit rules"):
+        sma_cross(
+            entry_long=BoolNode(
+                node="all",
+                terms=[
+                    Comparison(
+                        left=IndicatorOperand(id="sma_fast"),
+                        cmp="cross_above",
+                        right=IndicatorOperand(id="sma_slow"),
+                    ),
+                    BoolNode(node="not", terms=[position_rule()]),
+                ],
+            )
+        )
+
+
+def test_an_exit_rule_may_read_position_state():
+    """Where there is a position to read."""
+    d = sma_cross(exit_long=position_rule())
+    assert d.exit_long.left.field == "bars_held"

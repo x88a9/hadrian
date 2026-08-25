@@ -4,5 +4,9 @@ sqlalchemy
 alembic
 psycopg[binary]
 pydantic-settings
+# Runtime, not just test: the candle source fetches from the read-only
+# Hyperliquid /info endpoint. It was a dev-only dependency while the only
+# caller was FastAPI's TestClient.
+httpx
 python-multipart
 openpyxl

@@ -27,6 +27,7 @@ from app.models.system import System
 from app.models.trade import Trade
 from app.services import metrics as metrics_service
 from app.strategy.definition import StrategyDefinition, StrategyDefinitionError
+from app.strategy.render import render_condition, render_stop, render_target
 from app.strategy.sandbox import SandboxError
 
 __all__ = [
@@ -381,34 +382,51 @@ def _to_trade_row(
 
 
 def _describe_rule(definition: StrategyDefinition, which: str) -> str:
-    """A one-line human summary for the systems table's free-text rule columns.
+    """A one-line summary for the systems table's free-text rule columns.
 
-    Those columns are prose written by a person for imported systems. An engine
-    system has a machine-readable definition instead, so this says where to
-    look rather than pretending to render the rule tree as English.
+    Those columns hold prose for the imported systems and are shown side by
+    side in the systems list, so an engine system that filled them with "see
+    the strategy definition" left a hole in the table. A declarative rule
+    renders back into something readable; a Python strategy genuinely cannot,
+    and says so rather than pretending.
     """
     if definition.rules == "python":
-        return f"Python strategy ({which} logic in the strategy source)"
-    return f"Declarative rule tree ({which}; see the strategy definition)"
+        return f"Python strategy — {which} logic in the strategy source"
+
+    payload = definition.to_json_dict()
+    if which == "entry":
+        parts = [
+            render_condition(payload.get("entry_long")),
+            render_condition(payload.get("entry_short")),
+        ]
+        labelled = [
+            f"{label}: {text}"
+            for label, text in zip(("long", "short"), parts)
+            if text
+        ]
+        filters = [render_condition(f) for f in payload.get("filters") or []]
+        filters = [f for f in filters if f]
+        if filters:
+            labelled.append("filter: " + " and ".join(filters))
+        return " · ".join(labelled) or "no entry rule"
+
+    parts = [
+        render_condition(payload.get("exit_long")),
+        render_condition(payload.get("exit_short")),
+    ]
+    labelled = [
+        f"{label}: {text}" for label, text in zip(("long", "short"), parts) if text
+    ]
+    # An exit rule is optional: a strategy can live entirely on its stop and
+    # target, and saying so is more informative than an empty cell.
+    return " · ".join(labelled) or "stop and target only"
 
 
 def _describe_stop(definition: StrategyDefinition) -> str:
-    stop = definition.risk.stop
-    if stop.kind == "atr_multiple":
-        return f"{stop.value}× ATR ({stop.indicator_id})"
-    if stop.kind == "percent":
-        return f"{stop.value}% from entry"
-    if stop.kind == "fixed_points":
-        return f"{stop.value} points from entry"
-    return f"Indicator level ({stop.indicator_id})"
+    return render_stop(definition.risk.stop.model_dump(mode="json"))
 
 
 def _describe_target(definition: StrategyDefinition) -> str | None:
-    target = definition.risk.target
-    if target is None:
+    if definition.risk.target is None:
         return None
-    if target.kind == "r_multiple":
-        return f"{target.value}R"
-    if target.kind == "percent":
-        return f"{target.value}% from entry"
-    return f"Indicator level ({target.indicator_id})"
+    return render_target(definition.risk.target.model_dump(mode="json"))

@@ -34,6 +34,25 @@ Being precise about that is more useful than a polished claim:
 - **Live trade journal** — a six-stage ticket lifecycle with a position-size
   calculator, an append-only balance ledger and execution-quality tracking
   (slippage plus fee deviation against the plan).
+- **Backtesting engine** — an event-driven engine that runs a strategy against
+  OHLC candles and produces trades in R, net of fees, slippage and funding. A
+  signal on one bar fills at the *next* bar's open, and every operand in the
+  rule language carries a non-negative bar offset, so lookahead is
+  unrepresentable rather than merely avoided. Engine results land in the same
+  tables as the imported ones, so the metrics, walk-forward and Monte-Carlo
+  above read them with no special-casing.
+- **Strategy designer** — write a strategy as a declarative rule tree or as
+  Python in an in-browser Monaco editor, version it (saves are append-only,
+  never in place), and backtest it from the UI. Untrusted Python runs in a
+  four-layer sandbox: an unprivileged network namespace, a CPython audit hook,
+  resource limits, and a wall clock.
+- **Parameter sweeps** — vary two declared parameters over their declared ranges
+  into the topography view above.
+- **Order execution — dry-run and testnet only.** Position sizing goes through
+  the same verified calculator the live journal uses, scaled by how proven the
+  system is. Every order is journalled, simulated ones as completely as real
+  ones. **Mainnet is refused**, and the default install cannot sign a
+  transaction at all — see [The execution boundary](#the-execution-boundary).
 - **Client library** — `hadrian3_client`, for pushing backtests from a research
   script.
 
@@ -49,13 +68,44 @@ deviation between planned and filled entry. Synthetic sample data throughout. Th
 - Risk rules are schema and read-only listing — no breach checking, no alerting.
 - The concept graph (systems ↔ concepts, M:N) is modelled and assignable, but no
   graph analysis is built on it yet.
-- No exchange connectivity. Live trades are journalled by hand; nothing is
-  placed automatically.
+- **No mainnet trading, by construction.** Execution runs in `DRY_RUN` or
+  against Hyperliquid testnet. The testnet *signature* has not yet been
+  exercised against the live venue — that needs a funded testnet agent wallet.
+  See PROGRESS.md.
+- No visual block designer yet. The declarative definition is exactly the shape
+  one would emit, so it is additive work rather than a rewrite.
+- Sweeps are synchronous and capped at 400 cells.
 - **The frontend has no automated tests.** The backend is well covered (see
   [Testing](#testing)); the UI is not covered at all.
 - The **UI is in German** while the backend, API and documentation are English.
 
 **What comes next** — see the [roadmap](#roadmap).
+
+---
+
+## The execution boundary
+
+This system builds order execution and arms no mainnet trading. That is
+structural rather than a convention someone has to remember:
+
+- `ExecutionMode` names three modes and permits two. `DRY_RUN` (the default)
+  opens no socket; `TESTNET` trades the Hyperliquid testnet.
+- Mainnet is refused four independent ways. No configuration resolves to it, a
+  guard raises on every order path, there is no mainnet exchange URL in the tree
+  to send to, and **the default install has no capability to sign a transaction
+  at all** — the signing libraries live in `requirements-testnet.txt` and are
+  imported at call time. A guard can be removed by a refactor; a library that is
+  not installed cannot be.
+- `backend/tests/test_execution_boundary.py` reads the source tree rather than
+  calling the code, because what is being protected is an invariant of the
+  repository rather than a behaviour of the current build.
+
+Reading mainnet *candles* is deliberately not execution: price history is data,
+testnet has none worth backtesting, and the market-data client refuses any URL
+whose path is not `/info` and holds no key material.
+
+Arming mainnet is a separate, manually reviewed change. PROGRESS.md sets out
+the four steps, the last of which starts by making that boundary test fail.
 
 ---
 

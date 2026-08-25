@@ -25,6 +25,7 @@ import type {
   MonteCarloResponse,
   RiskCalcRequest,
   RiskCalcResponse,
+  RuleVocabulary,
   StrategyCreatePayload,
   StrategyDetail,
   StrategyDuplicatePayload,
@@ -432,6 +433,12 @@ export function correctBalance(
 
 export function getStrategies(): Promise<StrategySummary[]> {
   return request<StrategySummary[]>("/strategies");
+}
+
+// The block designer's palette (indicator kinds, comparators, stop/target
+// kinds, ...), read off the schema itself — see vocabulary.py's docstring.
+export function getStrategySchema(): Promise<RuleVocabulary> {
+  return request<RuleVocabulary>("/strategies/schema");
 }
 
 export function createStrategy(

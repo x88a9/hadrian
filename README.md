@@ -41,11 +41,14 @@ Being precise about that is more useful than a polished claim:
   unrepresentable rather than merely avoided. Engine results land in the same
   tables as the imported ones, so the metrics, walk-forward and Monte-Carlo
   above read them with no special-casing.
-- **Strategy designer** — write a strategy as a declarative rule tree or as
-  Python in an in-browser Monaco editor, version it (saves are append-only,
-  never in place), and backtest it from the UI. Untrusted Python runs in a
-  four-layer sandbox: an unprivileged network namespace, a CPython audit hook,
-  resource limits, and a wall clock.
+- **Strategy designer** — build a strategy from blocks, or write it as Python
+  in an in-browser Monaco editor. Both edit one `StrategyDefinition`: change it
+  in the block view, switch to JSON, and the change is there. The block
+  palette is served from the Python schema itself (`GET /strategies/schema`), so
+  it cannot offer something the validator refuses or quietly stop offering
+  something it allows. Saves are append-only versions, never edits in place.
+  Untrusted Python runs in a four-layer sandbox: an unprivileged network
+  namespace, a CPython audit hook, resource limits, and a wall clock.
 - **Parameter sweeps** — vary two declared parameters over their declared ranges
   into the topography view above.
 - **Order execution — dry-run and testnet only.** Position sizing goes through
@@ -72,11 +75,12 @@ deviation between planned and filled entry. Synthetic sample data throughout. Th
   against Hyperliquid testnet. The testnet *signature* has not yet been
   exercised against the live venue — that needs a funded testnet agent wallet.
   See PROGRESS.md.
-- No visual block designer yet. The declarative definition is exactly the shape
-  one would emit, so it is additive work rather than a rewrite.
 - Sweeps are synchronous and capped at 400 cells.
-- **The frontend has no automated tests.** The backend is well covered (see
-  [Testing](#testing)); the UI is not covered at all.
+- **The frontend is only lightly tested.** The block designer's pure logic has
+  unit tests, and a contract suite checks its understanding of the schema
+  against the running API (it skips when the API is down). React components
+  themselves are covered only by `tsc` and the production build — there is no
+  browser-level testing.
 - The **UI is in German** while the backend, API and documentation are English.
 
 **What comes next** — see the [roadmap](#roadmap).

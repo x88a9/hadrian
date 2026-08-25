@@ -97,12 +97,24 @@ between being strict and being usable.
   read them with no special-casing. `materialise_system` **refuses outright** to
   touch a system whose provenance is not `engine`.
 
-### E3 — Designer surface ✅
+### E3 — Designer surface ✅ (including the visual block designer)
 
 Monaco editor with Python highlighting, strategy CRUD, append-only versioning,
 duplication, backtest from the UI rendered through the existing metric cards,
 equity curve and R histogram, and a trades table. Warnings are shown
 prominently rather than buried.
+
+**The block designer** is a second tab editing the *same* `StrategyDefinition`
+object as the JSON editor — one object, two windows, one save path. Its palette
+is served by `GET /strategies/schema`, derived from the Python `Literal` types
+and the indicator registry rather than duplicated in TypeScript, so it cannot
+drift: a test asserts the derivation stays total in both directions.
+
+Verified against the running API rather than only against itself:
+`frontend/lib/blocks.contract.test.ts` round-trips a definition through the
+helpers and posts it to the real validator, and checks that switching to a
+crossing comparator strips the offsets the backend would otherwise reject. It
+skips cleanly when the API is down.
 
 ### E4 — Parameter sweeps ✅
 
@@ -139,9 +151,10 @@ grade C; materialised as an engine system that `/systems/{id}/montecarlo` and
    create and is deliberately not committed. A wrong signature is rejected by
    the venue rather than filling something unintended. **Treat the first live
    testnet order as the acceptance test.**
-2. **The visual block designer was not built.** The brief marked it the first
-   thing to drop, and it was. The declarative `StrategyDefinition` is exactly
-   the shape such a designer would emit, so nothing has to be undone for it.
+2. **The block designer has no browser-level test.** Its pure logic has unit
+   tests and its schema agreement has contract tests, but the React components
+   are covered only by `tsc`, the production build, and a page-load smoke test.
+   Nobody has automated a click-through.
 3. **Sweeps are synchronous and capped at 400 cells.** A larger grid wants a
    job queue. Building one before a sweep needs it would be machinery in front
    of a wait nobody has yet noticed.

@@ -931,3 +931,77 @@ export interface BacktestRequestPayload {
   overrides?: Record<string, number>;
   persist?: boolean;
 }
+
+// --- Block designer: rule vocabulary (GET /strategies/schema mirrors
+// backend/app/strategy/vocabulary.py's rule_vocabulary() one-to-one; it is
+// everything the designer needs to build a valid declarative definition,
+// derived from the schema itself rather than hand-copied). ---
+
+export interface IndicatorParamMeta {
+  name: string;
+  label: string;
+  default: number;
+  min: number;
+}
+
+export interface IndicatorVocabEntry {
+  kind: IndicatorKind;
+  label: string;
+  uses_source: boolean;
+  params: IndicatorParamMeta[];
+}
+
+export interface ComparatorVocabEntry {
+  op: Comparator;
+  is_crossing: boolean;
+  allows_offset: boolean;
+  numeric_friendly: boolean;
+}
+
+export interface BoolNodeVocabEntry {
+  node: "all" | "any" | "not";
+  label: string;
+  arity: "many" | "one";
+}
+
+export interface StopKindVocabEntry {
+  kind: StopSpec["kind"];
+  requires_indicator: boolean;
+}
+
+export interface TargetKindVocabEntry {
+  kind: TargetSpec["kind"];
+  requires_indicator: boolean;
+}
+
+// A rule "slot" is one of the definition's five condition trees. Position
+// operands only make sense while a position may be open, so the backend
+// refuses them (nested occurrences included) anywhere but exit_long/
+// exit_short — "position state (...) is only available to exit rules".
+// `allows_position` on each slot and `position_operand_slots` say the same
+// thing two ways; the designer uses whichever is convenient at the call site.
+export type RuleSlot = "entry_long" | "entry_short" | "exit_long" | "exit_short" | "filters";
+
+export interface RuleSlotVocabEntry {
+  slot: RuleSlot;
+  label: string;
+  allows_position: boolean;
+}
+
+export interface RuleVocabulary {
+  schema_version: number;
+  price_fields: PriceField[];
+  timeframes: string[];
+  directions: StrategyDefinition["direction"][];
+  rule_carriers: StrategyDefinition["rules"][];
+  indicators: IndicatorVocabEntry[];
+  comparators: ComparatorVocabEntry[];
+  operand_kinds: Operand["op"][];
+  position_fields: PositionOperand["field"][];
+  position_operand_slots: RuleSlot[];
+  rule_slots: RuleSlotVocabEntry[];
+  bool_nodes: BoolNodeVocabEntry[];
+  stop_kinds: StopKindVocabEntry[];
+  target_kinds: TargetKindVocabEntry[];
+  cost_defaults: CostSpec;
+}

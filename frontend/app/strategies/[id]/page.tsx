@@ -21,6 +21,7 @@ import { EngineTradesTable } from "@/components/engine-trades-table";
 import { EquityCurve } from "@/components/equity-curve";
 import { MetricCards } from "@/components/metric-cards";
 import { RHistogram } from "@/components/r-histogram";
+import { StrategyBlocks, type DefinitionEditorShared } from "@/components/strategy-blocks";
 import { StrategyEditor } from "@/components/strategy-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,10 +50,11 @@ import type {
   Trade,
 } from "@/lib/types";
 
-type TabKey = "editor" | "backtest" | "versions" | "trades";
+type TabKey = "editor" | "blocks" | "backtest" | "versions" | "trades";
 
 const TAB_LABEL: Record<TabKey, string> = {
   editor: "Editor",
+  blocks: "Blöcke",
   backtest: "Backtest",
   versions: "Versionen",
   trades: "Trades",
@@ -234,6 +236,96 @@ function StrategyDesignerBody({
 }) {
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null);
 
+  // The definition being edited — shared by the Editor (JSON) and Blöcke
+  // (blocks) tabs, so both are windows onto the exact same object: a change
+  // made in one is immediately visible when switching to the other, and
+  // Save from either goes through the same PUT /strategies/{id} call below.
+  const [definition, setDefinition] = useState<StrategyDefinition>(strategy.definition);
+  const [note, setNote] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [validation, setValidation] = useState<{ ok: boolean; errors: string[] } | null>(
+    null,
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Re-seed the shared definition when the strategy identity or its saved
+  // version changes from outside this component (initial load, restore from
+  // Versions tab).
+  useEffect(() => {
+    setDefinition(strategy.definition);
+    setValidation(null);
+    setSaveError(null);
+    setSaved(false);
+    setNote("");
+  }, [strategy.id, strategy.current_version]);
+
+  const handleValidate = useCallback(async () => {
+    setValidating(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const res = await validateStrategy(definition);
+      setValidation({ ok: res.ok, errors: res.errors });
+    } catch (err) {
+      setValidation(null);
+      setSaveError(
+        err instanceof ApiError
+          ? err.status === 0
+            ? "Backend nicht erreichbar."
+            : err.message
+          : err instanceof Error
+            ? err.message
+            : "Validierung fehlgeschlagen.",
+      );
+    } finally {
+      setValidating(false);
+    }
+  }, [definition]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const res = await validateStrategy(definition);
+      setValidation({ ok: res.ok, errors: res.errors });
+      if (!res.ok) return;
+      const updated = await updateStrategy(strategy.id, {
+        definition,
+        note: note.trim() || undefined,
+      });
+      setStrategy(updated);
+      setNote("");
+      setSaved(true);
+    } catch (err) {
+      setSaveError(
+        err instanceof ApiError
+          ? err.status === 0
+            ? "Backend nicht erreichbar."
+            : err.message
+          : err instanceof Error
+            ? err.message
+            : "Speichern fehlgeschlagen.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [definition, strategy.id, note, setStrategy]);
+
+  const shared: DefinitionEditorShared = {
+    note,
+    setNote,
+    validation,
+    saveError,
+    saved,
+    saving,
+    validating,
+    onValidate: () => void handleValidate(),
+    onSave: () => void handleSave(),
+  };
+
   return (
     <>
       <header className="flex flex-col gap-3">
@@ -303,7 +395,16 @@ function StrategyDesignerBody({
         </div>
 
         {activeTab === "editor" && (
-          <EditorPane strategy={strategy} setStrategy={setStrategy} />
+          <EditorPane
+            key={`${strategy.id}:${strategy.current_version}`}
+            strategy={strategy}
+            definition={definition}
+            setDefinition={setDefinition}
+            shared={shared}
+          />
+        )}
+        {activeTab === "blocks" && (
+          <StrategyBlocks definition={definition} onChange={setDefinition} shared={shared} />
         )}
         {activeTab === "backtest" && (
           <BacktestPane
@@ -328,100 +429,54 @@ function StrategyDesignerBody({
 
 function EditorPane({
   strategy,
-  setStrategy,
+  definition,
+  setDefinition,
+  shared,
 }: {
   strategy: StrategyDetail;
-  setStrategy: (s: StrategyDetail) => void;
+  definition: StrategyDefinition;
+  setDefinition: (d: StrategyDefinition) => void;
+  shared: DefinitionEditorShared;
 }) {
   const rules = strategy.definition.rules;
-  const [meta, setMeta] = useState(() => metaText(strategy.definition));
-  const [pythonSource, setPythonSource] = useState(
-    () => strategy.definition.python_source ?? "",
-  );
-  const [note, setNote] = useState("");
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [validation, setValidation] = useState<
-    { ok: boolean; errors: string[] } | null
-  >(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  // Local text state, seeded once from the shared definition at mount. The
+  // parent remounts this pane (via `key`) whenever the strategy identity or
+  // its saved version changes, so this never goes stale.
+  const [meta, setMeta] = useState(() => metaText(definition));
+  const [pythonSource, setPythonSource] = useState(() => definition.python_source ?? "");
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // Editoren beim Wechsel der Strategie (z. B. nach Restore) neu befuellen.
-  useEffect(() => {
-    setMeta(metaText(strategy.definition));
-    setPythonSource(strategy.definition.python_source ?? "");
-    setValidation(null);
-    setSaveError(null);
-    setSaved(false);
-  }, [strategy.id, strategy.current_version]);
-
-  function buildDefinition(): StrategyDefinition {
-    const parsed = JSON.parse(meta) as Omit<StrategyDefinition, "python_source">;
-    return {
-      ...parsed,
-      python_source: rules === "python" ? pythonSource : null,
-    };
-  }
-
-  async function handleValidate() {
-    setValidating(true);
-    setSaveError(null);
-    setSaved(false);
+  // Push a parsed edit up into the shared definition immediately — this is
+  // what makes "edit in JSON, switch to Blöcke" show the change without a
+  // separate sync step. While the text is not valid JSON, the shared
+  // definition simply keeps its last valid value and Save/Validate are
+  // disabled below, rather than operating on stale or unparsable data.
+  function push(nextMeta: string, nextPythonSource: string) {
     try {
-      const definition = buildDefinition();
-      const res = await validateStrategy(definition);
-      setValidation({ ok: res.ok, errors: res.errors });
-    } catch (err) {
-      setValidation(null);
-      setSaveError(
-        err instanceof SyntaxError
-          ? `Ungültiges JSON: ${err.message}`
-          : err instanceof ApiError
-            ? err.status === 0
-              ? "Backend nicht erreichbar."
-              : err.message
-            : err instanceof Error
-              ? err.message
-              : "Validierung fehlgeschlagen.",
-      );
-    } finally {
-      setValidating(false);
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setSaveError(null);
-    setSaved(false);
-    try {
-      const definition = buildDefinition();
-      const res = await validateStrategy(definition);
-      setValidation({ ok: res.ok, errors: res.errors });
-      if (!res.ok) return;
-      const updated = await updateStrategy(strategy.id, {
-        definition,
-        note: note.trim() || undefined,
+      const parsed = JSON.parse(nextMeta) as Omit<StrategyDefinition, "python_source">;
+      setDefinition({
+        ...parsed,
+        python_source: rules === "python" ? nextPythonSource : null,
       });
-      setStrategy(updated);
-      setNote("");
-      setSaved(true);
+      setJsonError(null);
     } catch (err) {
-      setSaveError(
-        err instanceof SyntaxError
-          ? `Ungültiges JSON: ${err.message}`
-          : err instanceof ApiError
-            ? err.status === 0
-              ? "Backend nicht erreichbar."
-              : err.message
-            : err instanceof Error
-              ? err.message
-              : "Speichern fehlgeschlagen.",
-      );
-    } finally {
-      setSaving(false);
+      setJsonError(err instanceof Error ? err.message : "Ungültiges JSON.");
     }
   }
+
+  function handleMetaChange(next: string) {
+    setMeta(next);
+    push(next, pythonSource);
+  }
+
+  function handlePythonChange(next: string) {
+    setPythonSource(next);
+    push(meta, next);
+  }
+
+  const { note, setNote, validation, saveError, saved, validating, saving, onValidate, onSave } =
+    shared;
+  const blocked = jsonError !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -431,7 +486,7 @@ function EditorPane({
             <SectionTitle>Python-Quelltext</SectionTitle>
             <StrategyEditor
               value={pythonSource}
-              onChange={setPythonSource}
+              onChange={handlePythonChange}
               language="python"
               height={420}
             />
@@ -442,7 +497,7 @@ function EditorPane({
             </SectionTitle>
             <StrategyEditor
               value={meta}
-              onChange={setMeta}
+              onChange={handleMetaChange}
               language="json"
               height={280}
             />
@@ -453,12 +508,19 @@ function EditorPane({
           <SectionTitle>Definition (JSON)</SectionTitle>
           <StrategyEditor
             value={meta}
-            onChange={setMeta}
+            onChange={handleMetaChange}
             language="json"
             height={560}
           />
         </div>
       )}
+
+      {jsonError ? (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+          Ungültiges JSON — Änderungen werden erst übernommen, sobald der Text
+          wieder gültiges JSON ist: {jsonError}
+        </p>
+      ) : null}
 
       {validation ? (
         <div
@@ -512,14 +574,14 @@ function EditorPane({
         </div>
         <Button
           variant="outline"
-          onClick={() => void handleValidate()}
-          disabled={validating || saving}
+          onClick={onValidate}
+          disabled={validating || saving || blocked}
           className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
         >
           {validating ? <Loader2 className="size-4 animate-spin" /> : null}
           Validieren
         </Button>
-        <Button onClick={() => void handleSave()} disabled={saving || validating}>
+        <Button onClick={onSave} disabled={saving || validating || blocked}>
           {saving ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (

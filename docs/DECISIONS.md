@@ -227,3 +227,65 @@ Numeric metrics are compared at relative tolerance `1e-6` (absolute `1e-9` near
 zero). Counts and grades must match exactly. Cross-checks against the upstream
 engines' own audit output use absolute tolerances instead, because those figures
 are themselves rounded on export.
+
+---
+
+## The execution boundary
+
+The engine phase builds order execution but arms no mainnet trading, and the
+refusal is structural rather than a convention anyone has to remember.
+`ExecutionMode` names three modes and permits two. Mainnet is refused four
+independent ways: `parse_execution_mode` will not return it from any
+configuration or payload, `require_permitted` raises on every path that could
+place an order, `EXCHANGE_BASE_URLS` has no entry to send it to, and no signing
+credential is committed or defaulted. Removing the guards would not produce a
+working mainnet order — it would produce a `KeyError`.
+
+`allow_mainnet=True` exists as a single named token so that the eventual,
+deliberate arming change is a one-line diff at one call site rather than a
+rewrite of the module. Nothing in the repository passes it, and
+`tests/test_execution_boundary.py` reads the source tree to keep it that way.
+That test asserts an invariant of the repository, not a behaviour of the
+current build, which is why it greps rather than calls.
+
+Market data is deliberately not execution. `InfoClient` reads mainnet candles
+freely — price history is data, and testnet has none worth backtesting — while
+holding no key material and refusing any URL whose path is not `/info`. Without
+that split the boundary would have had to choose between being strict and being
+usable.
+
+## Engine trades classify their own outcome
+
+`metrics.derive_win_loss` reproduces the research workbook's fallback rule,
+under which a trade with `-0.1 <= R < 0` classifies as *nothing at all*: the
+cell was left blank in the spreadsheet, and the importer has to reproduce that
+to reconcile against the workbook's own figures.
+
+The engine does not inherit that. It watched the trade close below its entry
+and records a loss. Carrying a blank-cell quirk into generated results would
+leave small losses unclassified and quietly undercount `losses` for every
+engine-produced system. Outside that band the two rules agree exactly, and both
+halves — the agreement and the divergence — are pinned by tests so neither can
+drift into being accidental.
+
+## Testing for lookahead: what does not work
+
+The obvious property is truncation invariance: trades that finished before bar
+*k* should not change when bars from *k* on are removed. It is a real property
+and worth keeping, but on its own it does not catch a one-bar lookahead. A
+trade that closed before *k* made its last decision at *k-2* or earlier, so it
+never reads the bar the truncation removed. The test passes with the defect
+present.
+
+What does work is tampering rather than truncating, comparing decisions rather
+than trades, and sweeping the cut point across every bar. Everything from bar
+*k* onward is replaced with a different price path, and the strategy's decision
+at *k-1* must not move. Decisions rather than trades, because a fill
+legitimately depends on the bar after the decision and comparing trades would
+confuse that with a defect. Every bar in turn, because a single cut point
+exposes exactly one decision, which is usually nowhere near the rule's
+threshold.
+
+`test_the_lookahead_property_would_catch_a_real_defect` injects the defect and
+asserts the check breaks. A property test that cannot fail proves nothing, and
+this one was silently vacuous in both of its earlier formulations.

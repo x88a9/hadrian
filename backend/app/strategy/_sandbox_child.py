@@ -49,6 +49,13 @@ import statistics  # noqa: E402
 _SYS = sys
 _STDOUT = sys.stdout
 
+from app.engine.backtest import (  # noqa: E402
+    BacktestResult,
+    EngineConfig,
+    Position,
+    run_backtest,
+)
+from app.engine.indicators import compute_specs  # noqa: E402
 from app.strategy.interface import (  # noqa: E402
     Bar,
     Context,
@@ -312,6 +319,69 @@ def task_describe(payload: dict) -> dict:
     }
 
 
+def task_backtest(payload: dict) -> dict:
+    """Run the whole backtest in here, around the user's ``on_bar``.
+
+    The engine is not re-implemented on this side of the boundary — it is the
+    same ``run_backtest`` the declarative path uses, imported here. Both
+    authoring paths therefore share one definition of what a fill is, what a
+    stop does and how R is computed, and a difference between a designed
+    strategy and a written one can only come from the rules.
+
+    One round trip carries the whole run. Handing bars across the process
+    boundary one at a time would cost more than the backtest.
+    """
+    definition = payload["definition"]
+    bars = payload["bars"]
+
+    namespace = _exec_user_module(payload["source"])
+    cls = _find_strategy_class(namespace)
+    strategy = cls()
+
+    indicators = compute_specs(definition.get("indicators") or [], bars)
+
+    timestamps = [datetime.datetime.fromisoformat(t) for t in bars["ts"]]
+    bar_objects = [
+        Bar(
+            timestamps[i],
+            bars["open"][i],
+            bars["high"][i],
+            bars["low"][i],
+            bars["close"][i],
+            bars.get("volume", [0.0] * len(timestamps))[i],
+        )
+        for i in range(len(timestamps))
+    ]
+
+    params = {
+        name: float(spec["value"] if isinstance(spec, dict) else spec)
+        for name, spec in (definition.get("parameters") or {}).items()
+    }
+
+    strategy.setup()
+
+    def signal_fn(index: int, position: Position | None):
+        view = None
+        if position is not None:
+            close = bars["close"][index]
+            view = PositionView(
+                direction=position.direction,
+                entry_price=position.entry_price,
+                stop_price=position.stop_price,
+                entry_index=position.entry_index,
+                bars_held=index - position.entry_index,
+                unrealised_r=position.unrealised_r(close),
+            )
+        return strategy.on_bar(
+            Context(bar_objects, indicators, index, params, view)
+        )
+
+    result = run_backtest(
+        bars, indicators, EngineConfig.from_dict(definition), signal_fn
+    )
+    return result.as_dict()
+
+
 def task_probe(payload: dict) -> dict:
     """Execute arbitrary source and report what happened. Tests only.
 
@@ -325,6 +395,7 @@ def task_probe(payload: dict) -> dict:
 
 TASKS = {
     "describe": task_describe,
+    "backtest": task_backtest,
     "probe": task_probe,
 }
 

@@ -178,6 +178,14 @@ class Context:
     # -- looking backwards -------------------------------------------------- #
 
     def _resolve(self, offset: int) -> int:
+        """Turn a backwards offset into an index, refusing to look forward.
+
+        A negative offset is always a bug — there is no bar after the one being
+        decided on — so it raises rather than being clamped. Reaching *before*
+        the start is different: it is what every strategy does on its first few
+        bars, and it raises here only for callers that need a real bar. See
+        :meth:`indicator` for the case that returns ``None`` instead.
+        """
         if offset < 0:
             raise LookaheadError(
                 f"offset {offset} asks for a bar after the one being decided on; "
@@ -220,8 +228,20 @@ class Context:
         """A declared indicator's value, ``offset`` bars back.
 
         ``None`` during the warm-up period, before the indicator has enough
-        history. Returning ``None`` rather than raising is deliberate: warm-up
-        is normal and a strategy should skip those bars, not crash on them.
+        history — and also when ``offset`` reaches back past the start of the
+        series, which is the same situation seen from the other end. Both are
+        normal on a strategy's first bars, and both mean "no value yet", so
+        both give the same answer.
+
+        That is deliberately unlike :meth:`price`, which raises instead. An
+        indicator already has a documented not-ready value and every strategy
+        checks for it; a price does not, and returning ``None`` there would
+        turn a missing bar into a ``TypeError`` several lines further down,
+        somewhere in the user's arithmetic rather than at the point of the
+        mistake.
+
+        A *negative* offset still raises :class:`LookaheadError` — that is not
+        a missing value, it is a strategy reaching for the future.
         """
         try:
             series = self._indicators[indicator_id]
@@ -230,7 +250,13 @@ class Context:
                 f"undeclared indicator {indicator_id!r}; declared: "
                 f"{sorted(self._indicators)}"
             ) from None
-        return series[self._resolve(offset)]
+        if offset < 0:
+            raise LookaheadError(
+                f"offset {offset} asks for a bar after the one being decided on; "
+                "offsets count backwards and start at 0"
+            )
+        target = self._index - offset
+        return None if target < 0 else series[target]
 
     def indicator_ready(self, *indicator_ids: str) -> bool:
         """True when every named indicator has a value at this bar. The usual

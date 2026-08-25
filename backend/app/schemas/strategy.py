@@ -99,3 +99,26 @@ class BacktestRunSummaryOut(BaseModel):
 
 class BacktestRunOut(BacktestRunSummaryOut):
     trades: list[dict[str, Any]]
+
+
+class SweepRequest(BaseModel):
+    param_x: str
+    param_y: str
+    metric: str = "ev"
+    version: int | None = None
+    start: datetime | None = None
+    end: datetime | None = None
+    label: str | None = Field(default=None, max_length=128)
+
+
+class SweepOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    system_id: int
+    label: str | None
+    param_x: str
+    param_y: str
+    metric: str
+    points: list[dict[str, Any]]
+    created_at: datetime

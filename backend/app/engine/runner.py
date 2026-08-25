@@ -25,7 +25,7 @@ from app.engine.indicators import compute_specs
 from app.strategy.definition import StrategyDefinition
 from app.strategy.sandbox import SandboxLimits, run_sandboxed
 
-__all__ = ["bars_from_series", "run_definition"]
+__all__ = ["bars_from_series", "run_definition", "run_definition_grid"]
 
 
 def bars_from_series(series: CandleSeries) -> dict[str, list]:
@@ -102,3 +102,69 @@ def _run_in_sandbox(
         warnings=list(value.get("warnings", [])),
         warmup_bars=value.get("warmup_bars", 0),
     )
+
+
+def run_definition_grid(
+    definition: StrategyDefinition,
+    series: CandleSeries,
+    grid: list[dict[str, float]],
+    *,
+    limits: SandboxLimits | None = None,
+) -> list[BacktestResult]:
+    """Backtest one definition once per parameter set, in grid order.
+
+    The bars are converted once and shared across every run — for a declarative
+    strategy that is most of the work, since the engine loop itself is cheap.
+
+    For a Python strategy the whole grid goes into a *single* sandbox process,
+    which then loops inside. One spawn for a hundred-cell sweep instead of a
+    hundred is the difference between a sweep that runs while you watch and one
+    you go and make coffee for, and the isolation is unchanged: it is the same
+    sandbox, entered once.
+    """
+    if not grid:
+        return []
+
+    bars = bars_from_series(series)
+    bar_seconds = timeframe_delta(definition.timeframe).total_seconds()
+
+    if definition.rules == "python":
+        payloads = []
+        for overrides in grid:
+            payload = definition.resolve(overrides).to_json_dict()
+            payload["bar_seconds"] = bar_seconds
+            payloads.append(payload)
+
+        result = run_sandboxed(
+            "sweep",
+            {
+                "source": payloads[0]["python_source"],
+                "definitions": payloads,
+                "bars": bars,
+            },
+            limits=limits or SandboxLimits(timeout_s=300.0, memory_mb=512),
+        )
+        return [
+            BacktestResult(
+                trades=[EngineTrade(**t) for t in value.get("trades", [])],
+                bars=value.get("bars", 0),
+                warnings=list(value.get("warnings", [])),
+                warmup_bars=value.get("warmup_bars", 0),
+            )
+            for value in (result.value or [])
+        ]
+
+    results: list[BacktestResult] = []
+    for overrides in grid:
+        payload = definition.resolve(overrides).to_json_dict()
+        payload["bar_seconds"] = bar_seconds
+        indicators = compute_specs(payload["indicators"], bars)
+        results.append(
+            run_backtest(
+                bars,
+                indicators,
+                EngineConfig.from_dict(payload),
+                build_signal_fn(payload, bars, indicators),
+            )
+        )
+    return results

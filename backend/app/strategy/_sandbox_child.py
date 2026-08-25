@@ -382,6 +382,68 @@ def task_backtest(payload: dict) -> dict:
     return result.as_dict()
 
 
+def task_sweep(payload: dict) -> list:
+    """Run the same strategy over a whole grid of parameter sets, in one process.
+
+    A sweep of a hundred cells would otherwise be a hundred process spawns. The
+    isolation is identical — this is the same sandbox, entered once — and the
+    user's code is compiled once and re-instantiated per cell so that state
+    left on ``self`` by one parameter set cannot leak into the next.
+    """
+    bars = payload["bars"]
+    namespace = _exec_user_module(payload["source"])
+    cls = _find_strategy_class(namespace)
+
+    timestamps = [datetime.datetime.fromisoformat(t) for t in bars["ts"]]
+    volumes = bars.get("volume") or [0.0] * len(timestamps)
+    bar_objects = [
+        Bar(
+            timestamps[i],
+            bars["open"][i],
+            bars["high"][i],
+            bars["low"][i],
+            bars["close"][i],
+            volumes[i],
+        )
+        for i in range(len(timestamps))
+    ]
+
+    results = []
+    for definition in payload["definitions"]:
+        results.append(
+            _run_one(cls, definition, bars, bar_objects).as_dict()
+        )
+    return results
+
+
+def _run_one(cls, definition: dict, bars: dict, bar_objects: list) -> BacktestResult:
+    """One backtest, around a freshly constructed strategy instance."""
+    indicators = compute_specs(definition.get("indicators") or [], bars)
+    params = {
+        name: float(spec["value"] if isinstance(spec, dict) else spec)
+        for name, spec in (definition.get("parameters") or {}).items()
+    }
+
+    strategy = cls()
+    strategy.setup()
+
+    def signal_fn(index: int, position: Position | None):
+        view = None
+        if position is not None:
+            close = bars["close"][index]
+            view = PositionView(
+                direction=position.direction,
+                entry_price=position.entry_price,
+                stop_price=position.stop_price,
+                entry_index=position.entry_index,
+                bars_held=index - position.entry_index,
+                unrealised_r=position.unrealised_r(close),
+            )
+        return strategy.on_bar(Context(bar_objects, indicators, index, params, view))
+
+    return run_backtest(bars, indicators, EngineConfig.from_dict(definition), signal_fn)
+
+
 def task_probe(payload: dict) -> dict:
     """Execute arbitrary source and report what happened. Tests only.
 
@@ -396,6 +458,7 @@ def task_probe(payload: dict) -> dict:
 TASKS = {
     "describe": task_describe,
     "backtest": task_backtest,
+    "sweep": task_sweep,
     "probe": task_probe,
 }
 

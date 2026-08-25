@@ -30,11 +30,14 @@ from app.schemas.strategy import (
     StrategyDuplicate,
     StrategySummaryOut,
     StrategyUpdate,
+    SweepOut,
+    SweepRequest,
     ValidateRequest,
     ValidateResponse,
 )
-from app.services import strategy_service
+from app.services import strategy_service, sweep_service
 from app.services.strategy_service import StrategyConflict, StrategyServiceError
+from app.services.sweep_service import SweepTooLarge
 from app.strategy.definition import StrategyDefinition, StrategyDefinitionError
 
 router = APIRouter(tags=["strategies"])
@@ -275,3 +278,40 @@ def get_backtest(run_id: int, db: Session = Depends(get_db)):
     if run is None:
         raise HTTPException(status_code=404, detail=f"backtest run {run_id} not found")
     return run
+
+
+@router.post("/strategies/{strategy_id}/sweep", response_model=SweepOut)
+def run_sweep(
+    strategy_id: int,
+    payload: SweepRequest,
+    db: Session = Depends(get_db),
+    source: CandleSource = Depends(get_candle_source),
+):
+    """Sweep two parameters and store the grid the topography view reads.
+
+    Synchronous, like the single backtest, and bounded by the same reasoning —
+    see ``sweep_service.MAX_SWEEP_CELLS``. A grid above that limit is refused
+    with the arithmetic rather than attempted and abandoned halfway.
+    """
+    strategy = _get_strategy(db, strategy_id)
+    try:
+        return sweep_service.run_sweep(
+            db,
+            strategy,
+            source,
+            param_x=payload.param_x,
+            param_y=payload.param_y,
+            metric=payload.metric,
+            version=payload.version,
+            start=_as_utc(payload.start),
+            end=_as_utc(payload.end),
+            label=payload.label,
+        )
+    except SweepTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except StrategyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except StrategyServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CandleDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

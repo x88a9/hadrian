@@ -289,3 +289,42 @@ threshold.
 `test_the_lookahead_property_would_catch_a_real_defect` injects the defect and
 asserts the check breaks. A property test that cannot fail proves nothing, and
 this one was silently vacuous in both of its earlier formulations.
+
+## The rule vocabulary is derived, not written down twice
+
+The block designer needs to know what an indicator can be, which comparators
+exist, and what a stop can key on. All of that is already stated in
+`definition.py` as `Literal` types and in `indicators.py` as a registry, so
+`GET /strategies/schema` reads those rather than letting the frontend keep a
+parallel list.
+
+The alternative — a hand-maintained copy in TypeScript — fails in a specific
+and quiet way: someone adds an indicator to the engine, the designer never
+offers it, and nothing anywhere reports a problem. The failure is an absence,
+and absences do not raise.
+
+`vocabulary.py` therefore contains no lists of its own. Its tests assert the
+derivation stays total in *both* directions: a kind the schema allows but
+nothing describes fails, and a described kind the engine cannot compute fails
+too. The few hand-written flags that remain — `requires_indicator`,
+`allows_position` — are each checked against the validator rather than against
+the same assumption a second time.
+
+## Position state belongs to exit rules
+
+`bars_held`, `unrealised_r`, `entry_price` and `direction_sign` are only
+meaningful while a position is open. Entry rules run while flat, and filters
+gate entries, so in both the operand is `None` on every bar and any comparison
+against it is false forever.
+
+Such a rule used to validate. It did not raise, did not warn, and produced no
+trades — which is indistinguishable from a setup that genuinely never occurred.
+That is the worst available way to be wrong: silent, plausible, and only
+discoverable by someone who already suspected it.
+
+The schema now refuses a position operand in `entry_long`, `entry_short` and
+`filters`, nested occurrences included, and the vocabulary reports which slots
+allow one so the designer does not offer it in the first place. The engine's
+runtime behaviour is unchanged — it already treated a missing position as
+false, which remains right for the case where an exit rule is evaluated on a
+bar the position closed on.

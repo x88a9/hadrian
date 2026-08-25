@@ -10,7 +10,10 @@ from app.core.db import Base
 
 SYSTEM_STATUSES = ("backtest", "live_testing", "active", "retired")
 IMPORT_STATUSES = ("complete", "incomplete", "skipped")
-SYSTEM_PROVENANCES = ("manual", "programmatic")
+# "engine" is this platform's own backtester (engine phase). Imported
+# systems keep their existing provenance and their verified figures; an
+# engine system sits alongside them and is read by the same metrics.
+SYSTEM_PROVENANCES = ("manual", "programmatic", "engine")
 SYSTEM_ORIGINS = ("import", "ui")
 
 

@@ -8,6 +8,7 @@ from app.api import live_trades as live_trades_api
 from app.api import quant as quant_api
 from app.api import risk as risk_api
 from app.api import risk_rules as risk_rules_api
+from app.api import strategies as strategies_api
 from app.api import systems as systems_api
 from app.api import trades as trades_api
 
@@ -39,3 +40,4 @@ app.include_router(quant_api.router)
 app.include_router(risk_api.router)
 app.include_router(live_trades_api.router)
 app.include_router(live_settings_api.router)
+app.include_router(strategies_api.router)

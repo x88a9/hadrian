@@ -270,6 +270,7 @@ export function SystemsTable({ systems }: SystemsTableProps) {
           <option value={ALL}>Herkunft: alle</option>
           <option value="manual">Manuell</option>
           <option value="programmatic">Programmatisch</option>
+          <option value="engine">Engine</option>
         </select>
         <span className="ml-auto text-xs text-zinc-500 tabular-nums">
           {rows.length} / {systems.length}
@@ -381,6 +382,14 @@ export function SystemsTable({ systems }: SystemsTableProps) {
                             </span>
                           ) : null}
                         </div>
+                      ) : s.provenance === "engine" ? (
+                        <Badge
+                          variant="outline"
+                          title="Von der eigenen Backtesting-Engine erzeugt"
+                          className="font-normal bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                        >
+                          engine
+                        </Badge>
                       ) : (
                         <span className="text-xs text-zinc-600">manuell</span>
                       )}

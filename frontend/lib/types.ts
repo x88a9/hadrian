@@ -19,8 +19,9 @@ export type SystemOrigin = "import" | "ui";
 
 export type TabStatus = "complete" | "incomplete" | "skipped";
 
-// Where a system came from: manual (xlsx/CSV) vs. programmatic.
-export type Provenance = "manual" | "programmatic";
+// Where a system's data came from: hand-maintained (xlsx/CSV), an upstream
+// research engine, or this platform's own backtesting engine.
+export type Provenance = "manual" | "programmatic" | "engine";
 
 export interface MetricsBlock {
   total_trades: number;

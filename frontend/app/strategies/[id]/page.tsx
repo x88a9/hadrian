@@ -611,7 +611,10 @@ function BacktestPane({
 }) {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [persist, setPersist] = useState(true);
+  // Aus: ein exploratives Ausprobieren soll kein System hinterlassen. Beim
+  // Iterieren im Designer wuerde sonst jeder Lauf ein System schreiben und den
+  // vorigen Trade-Satz ersetzen. Entspricht dem Default von BacktestRequest.
+  const [persist, setPersist] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);

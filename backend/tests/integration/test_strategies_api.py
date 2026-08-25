@@ -463,3 +463,74 @@ def test_an_unknown_version_is_a_400_not_a_crash(client, strategy, candle_source
     )
     assert response.status_code == 400
     assert "no version 99" in response.json()["detail"]
+
+
+# --------------------------------------------------------------------------- #
+# The rule vocabulary the block designer builds from
+# --------------------------------------------------------------------------- #
+
+
+def test_the_schema_endpoint_is_not_shadowed_by_the_id_route(client):
+    """``/strategies/schema`` and ``/strategies/{strategy_id}`` are both GETs on
+    a two-segment path; the literal one has to be declared first or "schema"
+    gets parsed as an id."""
+    response = client.get("/strategies/schema")
+    assert response.status_code == 200
+    assert "indicators" in response.json()
+
+
+def test_the_vocabulary_covers_what_a_definition_needs(client):
+    body = client.get("/strategies/schema").json()
+
+    for key in (
+        "indicators",
+        "comparators",
+        "price_fields",
+        "operand_kinds",
+        "position_fields",
+        "bool_nodes",
+        "stop_kinds",
+        "target_kinds",
+        "timeframes",
+        "directions",
+        "cost_defaults",
+    ):
+        assert body.get(key), f"the designer cannot build without {key}"
+
+
+def test_a_definition_assembled_from_the_vocabulary_validates(client):
+    """The point of serving it: everything the palette offers must be something
+    the validator accepts."""
+    body = client.get("/strategies/schema").json()
+
+    indicator_kind = body["indicators"][0]["kind"]
+    period = body["indicators"][0]["params"][0]
+    stop_kind = next(s for s in body["stop_kinds"] if not s["requires_indicator"])
+
+    definition = {
+        "schema_version": body["schema_version"],
+        "name": "Assembled from the palette",
+        "asset": "BTC",
+        "timeframe": body["timeframes"][5],
+        "direction": body["directions"][0],
+        "indicators": [
+            {
+                "id": "ind",
+                "kind": indicator_kind,
+                "source": body["price_fields"][3],
+                "params": {period["name"]: period["default"]},
+            }
+        ],
+        "entry_long": {
+            "node": "compare",
+            "left": {"op": "price", "field": body["price_fields"][3], "offset": 0},
+            "cmp": ">",
+            "right": {"op": "indicator", "id": "ind", "offset": 0},
+        },
+        "risk": {"stop": {"kind": stop_kind["kind"], "value": 1.0}},
+        "costs": body["cost_defaults"],
+    }
+
+    validated = client.post("/strategies/validate", json={"definition": definition})
+    assert validated.status_code == 200
+    assert validated.json()["ok"] is True, validated.json()["errors"]

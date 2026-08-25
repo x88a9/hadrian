@@ -39,6 +39,7 @@ from app.services import strategy_service, sweep_service
 from app.services.strategy_service import StrategyConflict, StrategyServiceError
 from app.services.sweep_service import SweepTooLarge
 from app.strategy.definition import StrategyDefinition, StrategyDefinitionError
+from app.strategy.vocabulary import rule_vocabulary
 
 router = APIRouter(tags=["strategies"])
 
@@ -125,6 +126,17 @@ def StrategyVersionOut_from(version: StrategyVersion) -> dict:
 # --------------------------------------------------------------------------- #
 # Endpoints
 # --------------------------------------------------------------------------- #
+
+
+@router.get("/strategies/schema", response_model=dict)
+def get_rule_vocabulary():
+    """What a declarative strategy may be built from.
+
+    Served from the Python schema itself, so the block designer's palette and
+    the validator that will judge its output cannot disagree. Declared before
+    the ``/strategies/{strategy_id}`` route so the literal path wins the match.
+    """
+    return rule_vocabulary()
 
 
 @router.get("/strategies", response_model=list[StrategySummaryOut])

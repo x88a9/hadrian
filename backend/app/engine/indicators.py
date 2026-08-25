@@ -24,6 +24,7 @@ from typing import Callable, Mapping, Sequence
 
 __all__ = [
     "INDICATORS",
+    "INDICATOR_META",
     "IndicatorError",
     "atr",
     "compute",
@@ -215,6 +216,57 @@ def roc(values: Sequence[float], period: int) -> Series:
         out[i] = None if reference == 0 else (values[i] / reference - 1.0) * 100.0
     return out
 
+
+#: Human-facing description of each indicator: what to call it, whether it
+#: reads one price series or the whole bar, and what it can be tuned by.
+#:
+#: This exists so the block designer can build its own form controls from the
+#: engine's actual capabilities rather than from a second list maintained by
+#: hand in the frontend. A test asserts every registry entry has one and vice
+#: versa, so adding an indicator without describing it fails loudly.
+INDICATOR_META: dict[str, dict] = {
+    "sma": {
+        "label": "Simple moving average",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 20, "min": 1}],
+    },
+    "ema": {
+        "label": "Exponential moving average",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 20, "min": 1}],
+    },
+    "rsi": {
+        "label": "Relative strength index",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 14, "min": 2}],
+    },
+    "atr": {
+        "label": "Average true range",
+        # Reads high, low and close together; a source field would be ignored.
+        "uses_source": False,
+        "params": [{"name": "period", "label": "Period", "default": 14, "min": 1}],
+    },
+    "stdev": {
+        "label": "Rolling standard deviation",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 20, "min": 2}],
+    },
+    "highest": {
+        "label": "Highest value in window",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 20, "min": 1}],
+    },
+    "lowest": {
+        "label": "Lowest value in window",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 20, "min": 1}],
+    },
+    "roc": {
+        "label": "Rate of change (%)",
+        "uses_source": True,
+        "params": [{"name": "period", "label": "Period", "default": 10, "min": 1}],
+    },
+}
 
 #: What ``kind`` may be in an ``IndicatorSpec``. Checked against the schema's
 #: ``IndicatorKind`` by a test, so the two cannot drift apart.

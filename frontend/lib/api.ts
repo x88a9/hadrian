@@ -8,6 +8,9 @@ import type {
   AssetSetting,
   AssetSettingCreatePayload,
   AutoAssignResponse,
+  BacktestRequestPayload,
+  BacktestRun,
+  BacktestRunSummary,
   Concept,
   ConceptGraph,
   ConceptsResponse,
@@ -22,6 +25,13 @@ import type {
   MonteCarloResponse,
   RiskCalcRequest,
   RiskCalcResponse,
+  StrategyCreatePayload,
+  StrategyDetail,
+  StrategyDuplicatePayload,
+  StrategySummary,
+  StrategyUpdatePayload,
+  StrategyValidateResponse,
+  StrategyVersion,
   SystemConceptsResponse,
   SystemCreatePayload,
   SystemDetail,
@@ -416,4 +426,84 @@ export function correctBalance(
     method: "POST",
     body: JSON.stringify({ balance, note: note ?? null }),
   });
+}
+
+// --- E3: Strategy Designer ---
+
+export function getStrategies(): Promise<StrategySummary[]> {
+  return request<StrategySummary[]>("/strategies");
+}
+
+export function createStrategy(
+  payload: StrategyCreatePayload,
+): Promise<StrategyDetail> {
+  return request<StrategyDetail>("/strategies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getStrategy(id: number): Promise<StrategyDetail> {
+  return request<StrategyDetail>(`/strategies/${id}`);
+}
+
+// Creates a NEW version; never mutates an existing one.
+export function updateStrategy(
+  id: number,
+  payload: StrategyUpdatePayload,
+): Promise<StrategyDetail> {
+  return request<StrategyDetail>(`/strategies/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function duplicateStrategy(
+  id: number,
+  payload: StrategyDuplicatePayload,
+): Promise<StrategyDetail> {
+  return request<StrategyDetail>(`/strategies/${id}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteStrategy(id: number): Promise<void> {
+  return request<void>(`/strategies/${id}`, { method: "DELETE" });
+}
+
+export function getStrategyVersion(
+  id: number,
+  version: number,
+): Promise<StrategyVersion> {
+  return request<StrategyVersion>(`/strategies/${id}/versions/${version}`);
+}
+
+export function validateStrategy(
+  definition: StrategyDetail["definition"],
+): Promise<StrategyValidateResponse> {
+  return request<StrategyValidateResponse>("/strategies/validate", {
+    method: "POST",
+    body: JSON.stringify({ definition }),
+  });
+}
+
+export function backtestStrategy(
+  id: number,
+  payload: BacktestRequestPayload = {},
+): Promise<BacktestRun> {
+  return request<BacktestRun>(`/strategies/${id}/backtest`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getStrategyBacktests(
+  id: number,
+): Promise<BacktestRunSummary[]> {
+  return request<BacktestRunSummary[]>(`/strategies/${id}/backtests`);
+}
+
+export function getBacktest(runId: number): Promise<BacktestRun> {
+  return request<BacktestRun>(`/backtests/${runId}`);
 }

@@ -1,0 +1,10 @@
+-r requirements.txt
+
+# Testnet order signing. Deliberately NOT part of requirements.txt: a default
+# install of this system has no capability to sign a transaction at all, which
+# is a stronger guarantee than a guard saying it must not. Install this only if
+# you have decided to trade the Hyperliquid testnet, and read the module
+# docstring of app/execution/testnet.py first — the signature scheme has not
+# been exercised against the live venue.
+eth-account
+msgpack

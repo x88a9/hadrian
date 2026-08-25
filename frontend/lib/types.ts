@@ -690,3 +690,244 @@ export interface LiveTradesQuery {
   limit?: number;
   offset?: number;
 }
+
+// --- E3: Strategy Designer (StrategyDefinition mirrors
+// backend/app/strategy/definition.py one-to-one; see that file's docstring
+// for the design rationale — rules are data, not code, so lookahead bias is
+// unrepresentable and the definition round-trips through JSONB untouched). ---
+
+export const STRATEGY_SCHEMA_VERSION = 1;
+
+export type PriceField = "open" | "high" | "low" | "close" | "volume";
+
+export type IndicatorKind =
+  | "sma"
+  | "ema"
+  | "rsi"
+  | "atr"
+  | "stdev"
+  | "highest"
+  | "lowest"
+  | "roc";
+
+export interface ParameterSpec {
+  value: number;
+  lo?: number | null;
+  hi?: number | null;
+  step?: number | null;
+  description?: string | null;
+}
+
+export interface ParamRef {
+  param: string;
+}
+
+// Any place the definition accepts a number, it also accepts a parameter
+// reference (substituted by the engine's resolve() before running).
+export type StrategyNumber = number | ParamRef;
+
+export function isParamRef(v: StrategyNumber): v is ParamRef {
+  return typeof v === "object" && v !== null && "param" in v;
+}
+
+export interface PriceOperand {
+  op: "price";
+  field: PriceField;
+  offset: number;
+}
+
+export interface IndicatorOperand {
+  op: "indicator";
+  id: string;
+  offset: number;
+}
+
+export interface ConstOperand {
+  op: "const";
+  value: StrategyNumber;
+}
+
+export interface PositionOperand {
+  op: "position";
+  field: "bars_held" | "unrealised_r" | "entry_price" | "direction_sign";
+}
+
+export type Operand =
+  | PriceOperand
+  | IndicatorOperand
+  | ConstOperand
+  | PositionOperand;
+
+export type Comparator =
+  | "<"
+  | "<="
+  | ">"
+  | ">="
+  | "=="
+  | "!="
+  | "cross_above"
+  | "cross_below";
+
+export interface Comparison {
+  node: "compare";
+  left: Operand;
+  cmp: Comparator;
+  right: Operand;
+}
+
+export interface BoolNode {
+  node: "all" | "any" | "not";
+  terms: Condition[];
+}
+
+export type Condition = Comparison | BoolNode;
+
+export interface IndicatorSpec {
+  id: string;
+  kind: IndicatorKind;
+  source: PriceField;
+  params: Record<string, StrategyNumber>;
+}
+
+export interface StopSpec {
+  kind: "atr_multiple" | "percent" | "indicator" | "fixed_points";
+  value: StrategyNumber;
+  indicator_id?: string | null;
+  breakeven_at_r?: StrategyNumber | null;
+  trail_atr_multiple?: StrategyNumber | null;
+}
+
+export interface TargetSpec {
+  kind: "r_multiple" | "percent" | "indicator";
+  value: StrategyNumber;
+  indicator_id?: string | null;
+}
+
+export interface RiskSpec {
+  stop: StopSpec;
+  target?: TargetSpec | null;
+  max_bars_held?: number | null;
+  max_concurrent_positions: 1;
+}
+
+export interface CostSpec {
+  entry_fee_pct: number;
+  exit_fee_pct: number;
+  slippage_pct: number;
+  funding_pct_per_day: number;
+}
+
+export interface StrategyDefinition {
+  schema_version: number;
+  name: string;
+  description?: string | null;
+
+  asset: string;
+  timeframe: string;
+  direction: "long" | "short" | "both";
+
+  // Which carrier holds the entry/exit logic — see definition.py's docstring.
+  rules: "declarative" | "python";
+  python_source?: string | null;
+
+  parameters: Record<string, ParameterSpec>;
+  indicators: IndicatorSpec[];
+
+  entry_long?: Condition | null;
+  entry_short?: Condition | null;
+  exit_long?: Condition | null;
+  exit_short?: Condition | null;
+  filters: Condition[];
+
+  risk: RiskSpec;
+  costs: CostSpec;
+}
+
+export interface StrategySummary {
+  id: number;
+  name: string;
+  description: string | null;
+  asset: string;
+  timeframe: string;
+  rules: "declarative" | "python";
+  current_version: number;
+  updated_at: string;
+  last_backtest_at: string | null;
+  last_total_r: number | null;
+}
+
+export interface StrategyVersion {
+  version: number;
+  definition: StrategyDefinition;
+  note: string | null;
+  created_at: string;
+}
+
+export interface StrategyDetail extends StrategySummary {
+  definition: StrategyDefinition;
+  versions: StrategyVersion[];
+}
+
+export interface StrategyCreatePayload {
+  name: string;
+  description?: string | null;
+  definition: StrategyDefinition;
+}
+
+export interface StrategyUpdatePayload {
+  definition: StrategyDefinition;
+  note?: string;
+}
+
+export interface StrategyDuplicatePayload {
+  name: string;
+}
+
+export interface StrategyValidateResponse {
+  ok: boolean;
+  errors: string[];
+  definition?: StrategyDefinition;
+}
+
+export interface EngineTrade {
+  entry_index: number;
+  exit_index: number;
+  entry_ts: string;
+  exit_ts: string;
+  direction: "long" | "short";
+  entry_price: number;
+  stop_price: number;
+  exit_price: number;
+  r_value: number;
+  gross_r: number;
+  cost_r: number;
+  win_loss: string;
+  bars_held: number;
+  exit_reason: string;
+  tag: string | null;
+}
+
+export interface BacktestRun {
+  id: number;
+  strategy_id: number;
+  version: number;
+  status: "ok" | "failed";
+  error: string | null;
+  bars: number;
+  warnings: string[];
+  // Der Backtest liefert dasselbe all/is/oos-Tripel wie jedes andere System,
+  // nicht einen einzelnen Block: die IS/OOS-Trennung greift auch hier.
+  metrics: SystemMetrics | null;
+  trades: EngineTrade[];
+  overrides: Record<string, number>;
+  created_at: string;
+}
+
+export type BacktestRunSummary = Omit<BacktestRun, "trades">;
+
+export interface BacktestRequestPayload {
+  start?: string;
+  end?: string;
+  overrides?: Record<string, number>;
+  persist?: boolean;
+}

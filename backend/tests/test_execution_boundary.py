@@ -246,3 +246,79 @@ def test_configured_default_is_dry_run(monkeypatch):
 
     monkeypatch.delenv("EXECUTION_MODE", raising=False)
     assert Settings(_env_file=None).EXECUTION_MODE is ExecutionMode.DRY_RUN
+
+
+# --------------------------------------------------------------------------- #
+# The execution layer's own surface
+# --------------------------------------------------------------------------- #
+
+
+def test_signing_is_not_a_default_dependency():
+    """The strongest property in this file is an absence.
+
+    ``eth-account`` and ``msgpack`` are not in requirements.txt, so a default
+    install of this system has no capability to sign a transaction at all —
+    not a guard refusing to, an inability. Guards can be removed by a
+    well-meaning refactor; a library that is not installed cannot be.
+    """
+    runtime = (BACKEND_DIR / "requirements.txt").read_text().lower()
+    for package in ("eth-account", "eth_account", "msgpack", "web3"):
+        assert package not in runtime, (
+            f"{package} is in the default install; signing must stay opt-in via "
+            "requirements-testnet.txt"
+        )
+
+
+def test_the_opt_in_signing_requirements_exist_and_say_why():
+    optional = BACKEND_DIR / "requirements-testnet.txt"
+    assert optional.exists(), "requirements-testnet.txt is the documented opt-in"
+    text = optional.read_text()
+    assert "eth-account" in text
+    assert "testnet" in text.lower()
+
+
+def test_the_testnet_module_imports_signing_lazily():
+    """A module-level import would make the signing stack a hard dependency
+    again the moment anything imported the executor."""
+    path = EXECUTION_DIR / "testnet.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+
+    module_level = set()
+    for node in tree.body:  # top level only, not ast.walk
+        if isinstance(node, ast.Import):
+            module_level |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            module_level.add((node.module or "").split(".")[0])
+
+    forbidden = {"eth_account", "eth_utils", "eth_keys", "msgpack", "web3"}
+    assert not (module_level & forbidden), (
+        f"{sorted(module_level & forbidden)} imported at module scope in "
+        "testnet.py; signing must stay deferred to call time"
+    )
+
+
+def test_no_signing_credential_has_a_default_in_code():
+    """A key the process did not have to be given is a key someone else can
+    also obtain."""
+    source = (EXECUTION_DIR / "testnet.py").read_text()
+    assert 'os.environ.get(_ENV_KEY, "")' in source, (
+        "the agent key must come from the environment with an empty fallback"
+    )
+    assert not re.search(r'_ENV_KEY\s*,\s*"0x', source)
+
+
+def test_the_journal_cannot_record_a_mainnet_order():
+    """The execution journal's own vocabulary has no mainnet member, so the
+    table's history cannot be ambiguous about whether this build ever traded."""
+    from app.models.execution_order import EXECUTION_ORDER_MODES
+
+    assert set(EXECUTION_ORDER_MODES) == {"dry_run", "testnet"}
+
+
+def test_the_only_signing_source_character_is_the_testnet_one():
+    """Hyperliquid distinguishes the networks by a single character in the
+    signed payload. The production one is not a constant here, not a branch,
+    and not derivable from anything in the file."""
+    source = (EXECUTION_DIR / "testnet.py").read_text()
+    assert '_TESTNET_SOURCE = "b"' in source
+    assert not re.search(r'_(MAIN|PROD)\w*_SOURCE\s*=', source)

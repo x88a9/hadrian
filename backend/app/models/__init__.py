@@ -1,5 +1,6 @@
 from app.models.account import AccountBalance
 from app.models.concept import Concept, SystemConcept
+from app.models.execution_order import ExecutionOrder
 from app.models.import_run import ImportRun
 from app.models.journal import DailyRiskLog, JournalEntry
 from app.models.live_trade import LiveTrade
@@ -27,4 +28,5 @@ __all__ = [
     "Strategy",
     "StrategyVersion",
     "BacktestRun",
+    "ExecutionOrder",
 ]

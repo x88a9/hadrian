@@ -87,3 +87,8 @@ Thumbs.db
 
 # --- Embedded Dev-Postgres (dev_db.sh) ---
 .devdb/
+
+# --- Downloaded OHLC candles (engine phase) ---
+# Reproducible from the venue and potentially large; the cache is a local
+# performance and offline aid, not part of the repository.
+backend/.cache/

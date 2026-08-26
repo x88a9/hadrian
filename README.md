@@ -56,6 +56,9 @@ Being precise about that is more useful than a polished claim:
   system is. Every order is journalled, simulated ones as completely as real
   ones. **Mainnet is refused**, and the default install cannot sign a
   transaction at all — see [The execution boundary](#the-execution-boundary).
+- **In-app user guide** at `/docs` ("Anleitung") — how to use every part of the
+  platform, written against what the UI actually does and explicit about what it
+  does not.
 - **Client library** — `hadrian3_client`, for pushing backtests from a research
   script.
 

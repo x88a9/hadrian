@@ -14,6 +14,7 @@ const links = [
   { href: "/concepts", label: "Concepts" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/settings", label: "Settings" },
+  { href: "/docs", label: "Anleitung" },
 ] as const;
 
 export function SiteNav() {
